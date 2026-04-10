@@ -1,0 +1,104 @@
+#' Feature Engineering for Market Regime Detection
+#'
+#' @description Transforms raw OHLCV (Open, High, Low, Close, Volume) time-series
+#' data into a multi-dimensional feature space of rolling volatility and
+#' liquidity metrics using a high-performance C++ backend.
+#'
+#' @details This function serves as the primary data transformation layer of the
+#' \code{VolClusR} pipeline. It converts non-stationary price data into
+#' standardized features that capture different facets of market microstructure
+#' and "fat-tail" behavior.
+#'
+#' The calculation is offloaded to C++ via \code{Rcpp} to ensure that rolling
+#' window operations—which are computationally expensive in native R—execute
+#' with near-instantaneous latency, even on large datasets.
+#'
+#' @section Extracted Feature Set:
+#' \describe{
+#'   \item{Variance}{Standard rolling variance of log returns; captures overall volatility.}
+#'   \item{Abs_Return}{The magnitude of daily price movement, providing a direction-agnostic
+#'   measure of market activity.}
+#'   \item{Min_Return}{The maximum drawdown within the window; useful for identifying
+#'   "panic" or "stress" regimes.}
+#'   \item{Parkinson}{A high-low range-based volatility estimator, which is
+#'   statistically more efficient than close-to-close variance.}
+#'   \item{Rel_Volume}{Current volume relative to the window average, acting as a
+#'   proxy for market interest and liquidity flow.}
+#'   \item{Vol_Shock}{EWMA-based residuals that highlight sudden, high-frequency
+#'   deviations from the established volatility baseline.}
+#' }
+#'
+#' @param data A \code{data.frame} or \code{xts} object. Must contain the columns:
+#' \code{Date}, \code{Open}, \code{High}, \code{Low}, \code{Close}, and \code{Volume}.
+#' @param window Integer. The lookback period (in days/observations) used for the
+#' rolling calculations. (Default is 150).
+#'
+#' @return A \code{data.frame} of the same length as the input (minus window
+#' initialization rows), where features have been **Z-score standardized** #' (\eqn{\mu=0, \sigma=1}) to prepare for PCA and EM clustering.
+#'
+#' @note Rows containing \code{NA} values resulting from the rolling window
+#' initialization or log-differencing are automatically removed.
+#'
+#' @examples
+#' # 1. Generate Synthetic Market Data (Random Walk)
+#' set.seed(42)
+#' n_obs <- 300
+#' dates <- seq(as.Date("2023-01-01"), by = "day", length.out = n_obs)
+#'
+#' # Simulate a price path starting at 100
+#' price_path <- cumsum(rnorm(n_obs, mean = 0.0005, sd = 0.01)) + 100
+#'
+#' mock_data <- data.frame(
+#'   Date   = dates,
+#'   Open   = price_path + rnorm(n_obs, 0, 0.5),
+#'   High   = price_path + abs(rnorm(n_obs, 2, 0.5)),
+#'   Low    = price_path - abs(rnorm(n_obs, 2, 0.5)),
+#'   Close  = price_path,
+#'   Volume = rpois(n_obs, 5000)
+#' )
+#'
+#' # 2. Extract Features using a 150-day rolling window
+#' # (Note: The first 150 rows will be omitted due to window initialization)
+#' features <- extract_rolling_features(mock_data, window = 150)
+#'
+#' # 3. Inspect the results
+#' head(features)
+#' summary(features)
+#'
+#' # 4. Visualize the Vol_Shock feature
+#' plot(features$Date, features$Vol_Shock, type = "l",
+#'      main = "Standardized Volatility Shocks", col = "steelblue")
+#' abline(h = c(-2, 2), col = "red", linetype = "dashed")
+#'
+#' @export
+#' @importFrom Rcpp sourceCpp
+#' @importFrom stats na.omit
+#' @useDynLib VolClusR, .registration = TRUE
+extract_rolling_features <- function(data, window = 150) {
+
+  df <- na.omit(data) # omit the NA values
+
+  # calculate log differences to remove the time series part
+  df$Return <- c(NA, diff(log(df$Close)))
+  df <- na.omit(df)
+
+  # get the required columns in a structured format
+  input_matrix <- as.matrix(df[, c("Return", "High", "Low", "Volume")])
+
+  out_mat <- calculate_rolling_features_cpp(input_matrix, window)
+
+  feature_df <- as.data.frame(out_mat)
+
+  # naming the 6 columns
+  colnames(feature_df) <- c("Variance", "Abs_Return", "Min_Return", "Parkinson", "Rel_Volume", "Vol_Shock")
+
+  feature_df$Date <- df$Date
+
+  final_df <- na.omit(feature_df)
+
+  # scaling to apply PCA and EM algorithm
+  cols_to_scale <- c("Variance", "Abs_Return", "Min_Return", "Parkinson", "Rel_Volume", "Vol_Shock")
+  final_df[, cols_to_scale] <- scale(final_df[, cols_to_scale])
+
+  return(final_df)
+}

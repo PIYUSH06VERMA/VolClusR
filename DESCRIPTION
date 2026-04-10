@@ -1,0 +1,26 @@
+Package: VolClusR
+Title: Quantitative Regime Terminal
+Version: 0.0.1
+Authors@R: 
+    person("Piyush", "Verma", , "piyushv24@iitk.ac.in", role = c("aut", "cre"))
+Description: A high-performance quantitative framework for identifying latent 
+    market regimes in financial time series. The package utilizes a fast C++ 
+    backend to extract rolling OHLCV features, including variance, Parkinson 
+    volatility, and EWMA volatility shocks. It implements Principal Component 
+    Analysis (PCA) for feature decorrelation followed by the 
+    Expectation-Maximization (EM) algorithm via Gaussian Mixture Models (GMM) 
+    to cluster market states. Includes an interactive Shiny dashboard for 
+    visualizing transition matrices, return densities, and regime-switching 
+    timelines.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+LinkingTo: 
+    Rcpp
+Imports: 
+    bslib,
+    ggplot2,
+    mclust,
+    Rcpp,
+    shiny
