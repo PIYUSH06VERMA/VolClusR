@@ -26,3 +26,13 @@ install.packages(c("mclust", "ggplot2", "shiny", "bslib", "Rcpp"))
 
 # Install VolClusR from source
 install.packages("/path/to/VolClusR_0.1.0.tar.gz", repos = NULL, type = "source")
+```
+**GitHub Installation:**
+you can install the latest version of VolClusR directly from GitHub using the `devtools` package.
+
+```R
+# Install devtools if you haven't already
+install.packages("devtools")
+
+# Install VolClusR from GitHub
+devtools::install_github("yourusername/VolClusR")
